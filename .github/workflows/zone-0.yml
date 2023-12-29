@@ -11,9 +11,9 @@ on:
       - 'infra-as-code/bicep/orchestration/subPlacementAll/**'
 
 env:
-  ManagementGroupPrefix: ${{ variables.MG_PREFIX }}
-  TopLevelManagementGroupDisplayName: ${{ variables.MG_TOPLEVEL_DISPLAYNAME }}
-  Location: ${{ variables.LOCATION_GWC }}
+  ManagementGroupPrefix: ${{ vars.MG_PREFIX }}
+  TopLevelManagementGroupDisplayName: ${{ vars.MG_TOPLEVEL_DISPLAYNAME }}
+  Location: ${{ vars.LOCATION_GWC }}
   # LoggingSubId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   # LoggingResourceGroupName: "alz-logging-001"
   # HubNetworkSubId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}

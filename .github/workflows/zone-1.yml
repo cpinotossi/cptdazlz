@@ -9,14 +9,14 @@ on:
       - 'infra-as-code/bicep/modules/policy/assignments/**'
 
 env:
-  ManagementGroupPrefix: ${{ variables.MG_PREFIX }}
-  TopLevelManagementGroupDisplayName: ${{ variables.MG_TOPLEVEL_DISPLAYNAME }}
-  # Location: ${{ variables.LOCATION_GWC }}
+  ManagementGroupPrefix: ${{ vars.MG_PREFIX }}
+  TopLevelManagementGroupDisplayName: ${{ vars.MG_TOPLEVEL_DISPLAYNAME }}
+  # Location: ${{ vars.LOCATION_GWC }}
   # LoggingSubId: "44273f48-4fd6-4144-b278-d19d201ad922"
   # LoggingResourceGroupName: "zmoalz-centrallogging"
   # HubNetworkSubId: "0f18a4f9-2e78-43d0-b06a-6a490469a7a6"
   # HubNetworkResourceGroupName: "Hub_Networking"
-  RoleAssignmentManagementGroupId: ${{ variables.MG_PREFIX }} # we will deploy on top level MG of LZ.
+  RoleAssignmentManagementGroupId: ${{ vars.MG_PREFIX }} # we will deploy on top level MG of LZ.
   # PrivateSpokeNetworkSubId: "6a4b4279-20aa-4245-8b88-64f9f491b9b2"
   # PrivateSpokeNetworkResourceGroupName: "Private_LZ1_Networking"
   # PublicSpokeNetworkSubId: "1e63056d-66f8-4d36-8454-b4375eb8578f"
@@ -46,9 +46,9 @@ jobs:
         with:
           scope: managementgroup
           managementGroupId: ${{ env.RoleAssignmentManagementGroupId }}
-          region: ${{ variables.LOCATION_GWC }}
+          region: ${{ vars.LOCATION_GWC }}
           template: infra-as-code/bicep/modules/roleAssignments/roleAssignmentManagementGroup.bicep
-          parameters: infra-as-code/bicep/modules/roleAssignments/parameters/roleAssignmentManagementGroup.servicePrincipal.parameters.all.json parLogAnalyticsWorkspaceResourceId=${{ variables.LAW_ID_GWC }} parDdosProtectionPlanId="" parPrivateDnsResourceGroupId=${{ variables.PDNS_RG_ID }} parLogAnalyticsWorkSpaceAndAutomationAccountLocation=${{ variables.LOCATION_GWC }}
+          parameters: infra-as-code/bicep/modules/roleAssignments/parameters/roleAssignmentManagementGroup.servicePrincipal.parameters.all.json parLogAnalyticsWorkspaceResourceId=${{ vars.LAW_ID_GWC }} parDdosProtectionPlanId="" parPrivateDnsResourceGroupId=${{ vars.PDNS_RG_ID }} parLogAnalyticsWorkSpaceAndAutomationAccountLocation=${{ vars.LOCATION_GWC }}
           deploymentName: create_role_assignment-${{ env.runNumber }}
           failOnStdErr: false
 
@@ -58,7 +58,7 @@ jobs:
         with:
           scope: managementgroup
           managementGroupId: ${{ env.ManagementGroupPrefix }}
-          region: ${{ variables.LOCATION_GWC }}
+          region: ${{ vars.LOCATION_GWC }}
           template: infra-as-code/bicep/modules/policy/assignments/alzDefaults/alzDefaultPolicyAssignments.bicep
           parameters: infra-as-code/bicep/modules/policy/assignments/alzDefaults/parameters/alzDefaultPolicyAssignments.parameters.all.json
           deploymentName: create_policy_assignments-${{ env.runNumber }}
