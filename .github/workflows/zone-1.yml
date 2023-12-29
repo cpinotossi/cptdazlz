@@ -3,7 +3,7 @@ name: ALZ Zone-1 pipeline
 on:
   workflow_dispatch:
     branches:
-      - "alz-slim"
+      - "main"
     paths:
       - 'infra-as-code/bicep/modules/roleAssignments/**'
       - 'infra-as-code/bicep/modules/policy/assignments/**'
@@ -22,6 +22,10 @@ env:
   # PublicSpokeNetworkSubId: "1e63056d-66f8-4d36-8454-b4375eb8578f"
   # PublicSpokeNetworkResourceGroupName: "Public_LZ1_Networking"
   runNumber: ${{ github.run_number }}
+
+permissions:
+      id-token: write # if this is not setup we will not be able to use the az login federation feature
+      contents: read
 
 jobs:
   bicep_tenant_deploy:

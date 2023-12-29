@@ -330,13 +330,15 @@ gh run list --repo cpinotossi/$prefix
 # View the details of the last run
 gh run view $(gh run list --repo cpinotossi/$prefix --json databaseId --jq '.[0].databaseId') --repo cpinotossi/$prefix --log
 
-# trigger the lz zone-0.yml action
-gh api /repos/cpinotossi/$prefix/actions/workflows/zone-0.yml/dispatches -f ref=main
+# trigger the lz zone-1.yml action
+gh api /repos/cpinotossi/$prefix/actions/workflows/zone-1.yml/dispatches -f ref=main
 # List all runs for a repository
 gh run list --repo cpinotossi/$prefix
 # View the details of the last run
 gh run view $(gh run list --repo cpinotossi/$prefix --json databaseId --jq '.[0].databaseId') --repo cpinotossi/$prefix --log-failed
 gh run view -h
+
+
 ~~~
 
 ## Enterprise Azure Policy as Code (EPAC)
