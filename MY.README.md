@@ -3,7 +3,9 @@
 
 ![High Level Deployment Flow](docs/wiki/media/high-level-deployment-flow.png)
 
-## Deploy Management Groups Module
+## Deploy the modules manually
+
+### Deploy Management Groups Module
 
 Based on
 
@@ -28,7 +30,7 @@ PARAMETERS="@infra-as-code/bicep/modules/managementGroups/parameters/managementG
 az deployment tenant create --name ${NAME:0:63} --location $LOCATION --template-file $TEMPLATEFILE --parameters $PARAMETERS
 ~~~
 
-## Deploy Custom Policy Definitions Module
+### Deploy Custom Policy Definitions Module
 
 ~~~bash
 # instructions
@@ -45,7 +47,7 @@ PARAMETERS="@infra-as-code/bicep/modules/policy/definitions/parameters/customPol
 az deployment mg create --name ${NAME:0:63} --location $LOCATION --management-group-id $MGID --template-file $TEMPLATEFILE --parameters $PARAMETERS
 ~~~
 
-## Deploy Custom Policy Assignments Module
+### Deploy Custom Policy Assignments Module
 
 After you have deployed the policy module to add all of the custom ALZ Azure Policy Definitions & Initiatives you will need to assign the modules to the relevant Management Groups as per your requirements using the [Policy Assignments module](./infra-as-code/bicep/modules/policy/assignments/README.md).
 
@@ -71,7 +73,7 @@ az deployment mg create --name ${NAME:0:63} --location $LOCATION --management-gr
 If you wish to add your own additional custom Azure Policy Definitions please review [How Does ALZ-Bicep Implement Azure Policies?](https://github.com/Azure/ALZ-Bicep/wiki/PolicyDeepDive) and more specifically [Assigning Azure Policies](https://github.com/Azure/ALZ-Bicep/wiki/AssigningPolicies)
 
 
-## Deploy custom RBAC Role definition
+### Deploy custom RBAC Role definition
 
 ~~~bash
 # instructions
@@ -93,7 +95,7 @@ PARAMETERS="@infra-as-code/bicep/modules/customRoleDefinitions/parameters/custom
 az deployment mg create --name ${NAME:0:63} --location $LOCATION --management-group-id $MGID --template-file $TEMPLATEFILE --parameters $PARAMETERS
 ~~~
 
-## Deploy Logging & Sentinel Module
+### Deploy Logging & Sentinel Module
 
 ~~~bash
 # instructions
@@ -134,7 +136,7 @@ For example, you might use the Microsoft.OperationsManagement/solutions resource
 
 Please note that OMS has been deprecated and its functionality has been incorporated into Azure Monitor and Azure Security Center. However, the Microsoft.OperationsManagement/solutions resource provider is still used for managing these solutions.
 
-## Deploy Management Groups Diagnostic Settings Module
+### Deploy Management Groups Diagnostic Settings Module
 
 ~~~bash
 # instructions
@@ -224,36 +226,60 @@ az rest -h
 ~~~
 
 
-## Deploy vWAN Network Module
+### Deploy vWAN Network Module
+
+The module seesm very basic. The vWAN private DNS limitation is not covered. So you will need to provide an virtual Network to which the private DNS will be linked.
+That network will be shared via the
 
 ~~~bash
 # instructions
-code ./infra-as-code/bicep/modules/hubNetworking/README.md
 code ./infra-as-code/bicep/modules/vwanConnectivity/README.md
-code ./infra-as-code/bicep/modules/hubNetworking/parameters/hubNetworking.parameters.all.json
+code ./infra-as-code/bicep/modules/vwanConnectivity/vwanConnectivity.bicep
+code ./infra-as-code/bicep/modules/vwanConnectivity/parameters/vwanConnectivity.parameters.my.json
 
 # For Azure global regions
-
 # Set Platform connectivity subscription ID as the the current subscription
 ConnectivitySubscriptionId=$(az account list --query "[?name=='sub-myedge-01'].id" -o tsv)
-
 az account set --subscription $ConnectivitySubscriptionId
+# we are going to use our own parameters file
+cp infra-as-code/bicep/modules/vwanConnectivity/parameters/vwanConnectivity.parameters.all.json infra-as-code/bicep/modules/vwanConnectivity/parameters/vwanConnectivity.parameters.my.json
+code ./infra-as-code/bicep/modules/vwanConnectivity/parameters/vwanConnectivity.parameters.my.json
 
 # Set the top level MG Prefix in accordance to your environment. This example assumes default 'alz'.
 TopLevelMGPrefix="alz"
-
 dateYMD=$(date +%Y%m%dT%H%M%S%NZ)
-NAME="alz-HubNetworkingDeploy-${dateYMD}"
-GROUP="rg-$TopLevelMGPrefix-hub-networking-001"
-TEMPLATEFILE="infra-as-code/bicep/modules/hubNetworking/hubNetworking.bicep"
-PARAMETERS="@infra-as-code/bicep/modules/hubNetworking/parameters/hubNetworking.parameters.all.json"
+NAME="alz-vwanConnectivityDeploy-${dateYMD}"
+GROUP="rg-$TopLevelMGPrefix-vwan-001"
+TEMPLATEFILE="infra-as-code/bicep/modules/vwanConnectivity/vwanConnectivity.bicep"
+PARAMETERS="@infra-as-code/bicep/modules/vwanConnectivity/parameters/vwanConnectivity.parameters.my.json"
 LOCATION="germanywestcentral"
 MGID="alz"
 
-az group create --location eastus \
-   --name $GROUP
+az group create --location $LOCATION --name $GROUP
+az deployment group create --name ${NAME:0:63} --resource-group $GROUP --template-file $TEMPLATEFILE --parameters $PARAMETERS
+~~~
 
-az deployment group create --name ${NAME:0:63} --resource-group $GROUP --template-file $TEMPLATEFILE --parameters $PARAMETERS --parameters parLocation=$LOCATION parHubNetworkName=$MGID-hub-$LOCATION parHubNetworkAddressPrefix="10.0.0.0/16"
+## Github Actions
+
+~~~bash
+prefix=cptdazlz
+az ad app create --display-name myApp
+appsecret=$(az ad sp create-for-rbac -n $prefix --role contributor --query password -o tsv --scope /providers/Microsoft.Management/managementGroups/myedge)
+az ad sp list --display-name $prefix --query "[0].{appId:appId, id:id, appDisplayName:appDisplayName}"
+appid=$(az ad sp list --display-name $prefix --query [0].appId -o tsv)
+echo $appid
+az ad app federated-credential create --id $appid --parameters ./github.action/credential.json
+az ad app federated-credential list --id $appid
+
+# create github secret via gh cli for repo cptdazlz
+gh secret set AZURE_CLIENT_ID -b "$(az ad app federated-credential list --id $appid)"
+gh secret set AZURE_CLIENT_ID -b $appid -e production
+tid=$(az account show --query tenantId -o tsv)
+gh secret set AZURE_TENANT_ID -b $tid -e production
+subid=$(az account show --query id -o tsv)
+gh secret set AZURE_SUBSCRIPTION_ID -b $subid -e production
+gh secret list
+gh secret list --env production
 ~~~
 
 ## Enterprise Azure Policy as Code (EPAC)
