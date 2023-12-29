@@ -25,6 +25,10 @@ env:
   # PublicSpokeNetworkResourceGroupName: "Public_LZ1_Networking"
   runNumber: ${{ github.run_number }}
 
+permissions:
+      id-token: write
+      contents: read
+
 jobs:
   bicep_tenant_deploy:
     runs-on: ubuntu-latest
