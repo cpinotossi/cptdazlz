@@ -265,24 +265,34 @@ Setup azure credentials for github actions based on [Use GitHub Actions to conne
 
 
 ~~~bash
+# define the prefix
 prefix=cptdazlz
-az ad app create --display-name myApp
+# create service principal
 appsecret=$(az ad sp create-for-rbac -n $prefix --role contributor --query password -o tsv --scope /providers/Microsoft.Management/managementGroups/myedge)
-az ad sp list --display-name $prefix --query "[0].{appId:appId, id:id, appDisplayName:appDisplayName}"
+# get service principal appid
 appid=$(az ad sp list --display-name $prefix --query [0].appId -o tsv)
-echo $appid
+# all github to create tokens via inpersonation of the service principal
 az ad app federated-credential create --id $appid --parameters ./github.action/credential.json
+# verify federation setup
 az ad app federated-credential list --id $appid
-
 # create github secret via gh cli for repo cptdazlz
-gh secret set AZURE_CLIENT_ID -b "$(az ad app federated-credential list --id $appid)"
 gh secret set AZURE_CLIENT_ID -b $appid -e production
 tid=$(az account show --query tenantId -o tsv)
 gh secret set AZURE_TENANT_ID -b $tid -e production
 subid=$(az account show --query id -o tsv)
 gh secret set AZURE_SUBSCRIPTION_ID -b $subid -e production
-gh secret list
 gh secret list --env production
+~~~
+
+You will need to create an github action yaml like I did here: .github/workflows/login-test.yml
+
+~~~bash
+# trigger the action
+gh api /repos/cpinotossi/$prefix/actions/workflows/lzdeploy/login-test.yml/dispatches -f ref=main
+# List all runs for a repository
+gh run list --repo cpinotossi/$prefix
+# View the details of the last run
+gh run view $(gh run list --repo cpinotossi/$prefix --json databaseId --jq '.[-1].databaseId') --repo cpinotossi/$prefix --log
 ~~~
 
 ## Enterprise Azure Policy as Code (EPAC)

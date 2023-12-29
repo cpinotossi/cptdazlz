@@ -10,6 +10,7 @@ jobs:
   release-tests:
     name: Pre-Release Tests
     runs-on: ubuntu-latest
+    environment: production
 
     steps:
       - name: Checkout Repo
