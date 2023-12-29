@@ -3,16 +3,16 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "parRoleAssignmentNameGuid": {
-      "value": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+      "value": ""
     },
     "parRoleDefinitionId": {
-      "value": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+      "value": "acdd72a7-3385-48ef-bd42-f606fba81ae7"
     },
     "parAssigneePrincipalType": {
       "value": "ServicePrincipal"
     },
     "parAssigneeObjectId": {
-      "value": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+      "value": ""
     },
     "parTelemetryOptOut": {
       "value": false
