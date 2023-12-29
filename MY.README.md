@@ -16,6 +16,7 @@ code infra-as-code/bicep/modules/managementGroups/parameters/managementGroups.pa
 az account management-group list --query "[?displayName=='myedge.org'].id" -o tsv
 # review the bicep file
 code infra-as-code/bicep/modules/managementGroups/managementGroups.bicep
+
 ~~~
 
 ~~~bash
@@ -268,7 +269,7 @@ Setup azure credentials for github actions based on [Use GitHub Actions to conne
 # define the prefix
 prefix=cptdazlz
 # create service principal
-appsecret=$(az ad sp create-for-rbac -n $prefix --role contributor --query password -o tsv --scope /providers/Microsoft.Management/managementGroups/myedge)
+az ad sp create-for-rbac -n $prefix --role owner --query password -o tsv --scope /providers/Microsoft.Management/managementGroups/myedge
 # get service principal appid
 appid=$(az ad sp list --display-name $prefix --query [0].appId -o tsv)
 # all github to create tokens via inpersonation of the service principal
