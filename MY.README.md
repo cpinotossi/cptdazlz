@@ -35,8 +35,9 @@ az deployment tenant create --name ${NAME:0:63} --location $LOCATION --template-
 
 ~~~bash
 # instructions
-code /home/azureuser/ALZ-Bicep/infra-as-code/bicep/modules/policy/definitions/README.md
+code infra-as-code/bicep/modules/policy/definitions/README.md
 code infra-as-code/bicep/modules/policy/definitions/customPolicyDefinitions.bicep
+code infra-as-code/bicep/modules/policy/definitions/parameters/customPolicyDefinitions.parameters.all.json
 # For Azure global regions
 dateYMD=$(date +%Y%m%dT%H%M%S%NZ)
 NAME="alz-PolicyDefsDefaults-${dateYMD}"
@@ -55,10 +56,11 @@ After you have deployed the policy module to add all of the custom ALZ Azure Pol
 If you want to make all of the default Azure Policy Assignments that we recommend in the Azure Landing Zones conceptual architecture and reference implementation you can use the [ALZ Default Policy Assignments module](./infra-as-code/bicep/modules/policy/assignments/alzDefaults/README.md) to do this for you👍
 
 ~~~bash
-code /home/azureuser/ALZ-Bicep/infra-as-code/bicep/modules/policy/assignments/README.md
+code infra-as-code/bicep/modules/policy/assignments/README.md
 # copy the deny example
-cp infra-as-code/bicep/modules/policy/assignments/parameters/policyAssignmentManagementGroup.deny.parameters.min.json infra-as-code/bicep/modules/policy/assignments/parameters/policyAssignmentManagementGroup.deny.pubip.parameters.min.json
+# cp infra-as-code/bicep/modules/policy/assignments/parameters/policyAssignmentManagementGroup.deny.parameters.min.json infra-as-code/bicep/modules/policy/assignments/parameters/policyAssignmentManagementGroup.deny.pubip.parameters.min.json
 code infra-as-code/bicep/modules/policy/assignments/parameters/policyAssignmentManagementGroup.deny.pubip.parameters.min.json
+code infra-as-code/bicep/modules/policy/assignments/policyAssignmentManagementGroup.bicep
 
 dateYMD=$(date +%Y%m%dT%H%M%S%NZ)
 NAME="alz-alz-PolicyDenyAssignmentsDeployment-${dateYMD}"
@@ -73,13 +75,33 @@ az deployment mg create --name ${NAME:0:63} --location $LOCATION --management-gr
 
 If you wish to add your own additional custom Azure Policy Definitions please review [How Does ALZ-Bicep Implement Azure Policies?](https://github.com/Azure/ALZ-Bicep/wiki/PolicyDeepDive) and more specifically [Assigning Azure Policies](https://github.com/Azure/ALZ-Bicep/wiki/AssigningPolicies)
 
+#### alzDefaultPolicyAssignments
+
+In case we like to apply all Policies defined by ALZ we can use the following command:
+
+~~~bash
+code infra-as-code/bicep/modules/policy/assignments/alzDefaults/README.md
+code infra-as-code/bicep/modules/policy/assignments/alzDefaults/alzDefaultPolicyAssignments.bicep
+code infra-as-code/bicep/modules/policy/assignments/alzDefaults/parameters/alzDefaultPolicyAssignments.parameters.all.json
+
+dateYMD=$(date +%Y%m%dT%H%M%S%NZ)
+NAME="alz-alzPolicyAssignmentDefaults-${dateYMD}"
+LOCATION="eastus"
+MGID="alz"
+TEMPLATEFILE="infra-as-code/bicep/modules/policy/assignments/alzDefaults/alzDefaultPolicyAssignments.bicep"
+PARAMETERS="@infra-as-code/bicep/modules/policy/assignments/alzDefaults/parameters/alzDefaultPolicyAssignments.parameters.all.json"
+
+az deployment mg create --name ${NAME:0:63} --location $LOCATION --management-group-id $MGID --template-file $TEMPLATEFILE --parameters $PARAMETERS
+~~~
+
 
 ### Deploy custom RBAC Role definition
 
 ~~~bash
 # instructions
-code ./infra-as-code/bicep/modules/customRoleDefinitions/README.md
+code infra-as-code/bicep/modules/customRoleDefinitions/README.md
 code infra-as-code/bicep/modules/customRoleDefinitions/customRoleDefinitions.bicep
+code infra-as-code/bicep/modules/customRoleDefinitions/parameters/customRoleDefinitions.parameters.all.json
 # For Azure global regions
 
 # Management Group ID
@@ -269,7 +291,10 @@ Setup azure credentials for github actions based on [Use GitHub Actions to conne
 # define the prefix
 prefix=cptdazlz
 # create service principal
+# Important you cannot use the following scope:
 az ad sp create-for-rbac -n $prefix --role owner --query password -o tsv --scope /providers/Microsoft.Management/managementGroups/myedge
+# Instead you will need to provide the root scope see also https://github.com/Azure/ALZ-Bicep/wiki/DeploymentFlow#service-principal-account
+az ad sp create-for-rbac -n $prefix --role owner --query password -o tsv --scope /
 # get service principal appid
 appid=$(az ad sp list --display-name $prefix --query [0].appId -o tsv)
 # all github to create tokens via inpersonation of the service principal
@@ -283,17 +308,35 @@ gh secret set AZURE_TENANT_ID -b $tid -e production
 subid=$(az account show --query id -o tsv)
 gh secret set AZURE_SUBSCRIPTION_ID -b $subid -e production
 gh secret list --env production
+
+gh variable set MG_PREFIX -b alz --env production
+gh variable set MG_TOPLEVEL_DISPLAYNAME -b "MyEdge Landing Zones" --env production
+gh variable set LOCATION_GWC -b "germanywestcentral" --env production
+# get log analytics workspace id
+lawid=$(az monitor log-analytics workspace show -n alz-log-analytics -g rg-alz-logging-001 --query id -o tsv)
+gh variable set LAW_ID_GWC -b $lawid --env production
+pDnsRg=$(az group show -n rg-alz-vwan-001 --query id -o tsv)
+gh variable set PDNS_RG_ID -b $pDnsRg --env production
+gh variable list --env production
 ~~~
 
 You will need to create an github action yaml like I did here: .github/workflows/login-test.yml
 
 ~~~bash
-# trigger the action
-gh api /repos/cpinotossi/$prefix/actions/workflows/lzdeploy/login-test.yml/dispatches -f ref=main
+# trigger the login test action
+gh api /repos/cpinotossi/$prefix/actions/workflows/login-test.yml/dispatches -f ref=main
 # List all runs for a repository
 gh run list --repo cpinotossi/$prefix
 # View the details of the last run
-gh run view $(gh run list --repo cpinotossi/$prefix --json databaseId --jq '.[-1].databaseId') --repo cpinotossi/$prefix --log
+gh run view $(gh run list --repo cpinotossi/$prefix --json databaseId --jq '.[0].databaseId') --repo cpinotossi/$prefix --log
+
+# trigger the lz zone-0.yml action
+gh api /repos/cpinotossi/$prefix/actions/workflows/zone-0.yml/dispatches -f ref=main
+# List all runs for a repository
+gh run list --repo cpinotossi/$prefix
+# View the details of the last run
+gh run view $(gh run list --repo cpinotossi/$prefix --json databaseId --jq '.[0].databaseId') --repo cpinotossi/$prefix --log-failed
+gh run view -h
 ~~~
 
 ## Enterprise Azure Policy as Code (EPAC)
@@ -342,3 +385,27 @@ gh api repos/{owner}/{repo} --jq '.private'
 sudo snap install powershell --classic
 pwsh --version
 ~~~
+
+
+
+## github client
+
+~~~bash
+gh version # 2.6.0-15-g1a10fd5a (2022-03-16)
+type -p curl >/dev/null || (sudo apt update && sudo apt install curl -y)
+curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null && sudo apt update && sudo apt install gh -y
+sudo apt update
+sudo apt install gh
+which gh
+whereis gh
+gh version # 2.6.0-15-g1a10fd5a (2022-03-16)
+sudo snap remove gh
+echo $PATH
+code ~/.bashrc
+# add the following line export PATH=$PATH:/usr/bin/gh
+source ~/.bashrc
+echo $PATH
+gh version # 2.40.1 (2023-12-13)
+~~~
+
+you will need to modify

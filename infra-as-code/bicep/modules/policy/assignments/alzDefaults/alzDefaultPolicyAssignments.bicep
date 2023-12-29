@@ -20,7 +20,7 @@ param parLandingZoneChildrenMgAlzDefaultsEnable bool = true
 param parLandingZoneMgConfidentialEnable bool = false
 
 @sys.description('The region where the Log Analytics Workspace & Automation Account are deployed.')
-param parLogAnalyticsWorkSpaceAndAutomationAccountLocation string = 'eastus'
+param parLogAnalyticsWorkSpaceAndAutomationAccountLocation string = 'germanywestcentral'
 
 @sys.description('Log Analytics Workspace Resource ID.')
 param parLogAnalyticsWorkspaceResourceId string = ''

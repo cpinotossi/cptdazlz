@@ -11,9 +11,9 @@ on:
       - 'infra-as-code/bicep/orchestration/subPlacementAll/**'
 
 env:
-  ManagementGroupPrefix: "alz"
-  TopLevelManagementGroupDisplayName: "MyEdge Landing Zones"
-  Location: "germanywestcentral"
+  ManagementGroupPrefix: ${{ variables.MG_PREFIX }}
+  TopLevelManagementGroupDisplayName: ${{ variables.MG_TOPLEVEL_DISPLAYNAME }}
+  Location: ${{ variables.LOCATION_GWC }}
   # LoggingSubId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   # LoggingResourceGroupName: "alz-logging-001"
   # HubNetworkSubId: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
@@ -26,7 +26,7 @@ env:
   runNumber: ${{ github.run_number }}
 
 permissions:
-      id-token: write
+      id-token: write # if this is not setup we will not be able to use the az login federation feature
       contents: read
 
 jobs:
