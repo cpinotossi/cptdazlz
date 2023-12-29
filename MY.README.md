@@ -261,6 +261,9 @@ az deployment group create --name ${NAME:0:63} --resource-group $GROUP --templat
 
 ## Github Actions
 
+Setup azure credentials for github actions based on [Use GitHub Actions to connect to Azure](https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure) without secrets.
+
+
 ~~~bash
 prefix=cptdazlz
 az ad app create --display-name myApp
