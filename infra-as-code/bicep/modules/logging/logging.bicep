@@ -1,3 +1,5 @@
+targetScope = 'resourceGroup'
+
 metadata name = 'ALZ Bicep - Logging Module'
 metadata description = 'ALZ Bicep Module used to set up Logging'
 

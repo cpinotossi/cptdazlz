@@ -3,40 +3,40 @@
   "contentVersion": "1.0.0.0",
   "parameters": {
     "parLocation": {
-      "value": "eastus"
+      "value": "germanywestcentral"
     },
     "parCompanyPrefix": {
       "value": "alz"
     },
     "parHubNetworkName": {
-      "value": "alz-hub-eastus"
+      "value": "alz-hub-gwc"
     },
     "parHubNetworkAddressPrefix": {
-      "value": "10.20.0.0/16"
+      "value": "10.0.0.0/16"
     },
     "parSubnets": {
       "value": [
         {
           "name": "AzureBastionSubnet",
-          "ipAddressRange": "10.20.0.0/24",
+          "ipAddressRange": "10.0.0.0/24",
           "networkSecurityGroupId": "",
           "routeTableId": ""
         },
         {
           "name": "GatewaySubnet",
-          "ipAddressRange": "10.20.254.0/24",
+          "ipAddressRange": "10.0.254.0/24",
           "networkSecurityGroupId": "",
           "routeTableId": ""
         },
         {
           "name": "AzureFirewallSubnet",
-          "ipAddressRange": "10.20.255.0/24",
+          "ipAddressRange": "10.0.255.0/24",
           "networkSecurityGroupId": "",
           "routeTableId": ""
         },
         {
           "name": "AzureFirewallManagementSubnet",
-          "ipAddressRange": "10.20.253.0/24",
+          "ipAddressRange": "10.0.253.0/24",
           "networkSecurityGroupId": "",
           "routeTableId": ""
         }
@@ -70,7 +70,7 @@
       "value": "nsg-AzureBastionSubnet"
     },
     "parDdosEnabled": {
-      "value": true
+      "value": false
     },
     "parDdosPlanName": {
       "value": "alz-ddos-plan"
@@ -79,10 +79,10 @@
       "value": true
     },
     "parAzFirewallName": {
-      "value": "alz-azfw-eastus"
+      "value": "alz-azfw-gwc"
     },
     "parAzFirewallPoliciesName": {
-      "value": "alz-azfwpolicy-eastus"
+      "value": "alz-azfwpolicy-gwc"
     },
     "parAzFirewallTier": {
       "value": "Standard"
@@ -116,9 +116,9 @@
     },
     "parPrivateDnsZones": {
       "value": [
-        "privatelink.xxxxxx.azmk8s.io", // Replace xxxxxx with target region (i.e. eastus)
-        "privatelink.xxxxxx.batch.azure.com", // Replace xxxxxx with target region (i.e. eastus)
-        "privatelink.xxxxxx.kusto.windows.net", // Replace xxxxxx with target region (i.e. eastus)
+        "privatelink.gwc.azmk8s.io", // Replace xxxxxx with target region (i.e. eastus)
+        "privatelink.gwc.batch.azure.com", // Replace xxxxxx with target region (i.e. eastus)
+        "privatelink.gwc.kusto.windows.net", // Replace xxxxxx with target region (i.e. eastus)
         "privatelink.xxxxxx.backup.windowsazure.com", // Replace xxxxxx with target region geo code (i.e. for eastus, the geo code is eus)
         "privatelink.adf.azure.com",
         "privatelink.afs.azure.net",

@@ -9,10 +9,10 @@
       "value": ""
     },
     "parTopLevelManagementGroupDisplayName": {
-      "value": "Azure Landing Zones"
+      "value": "MyEdge Landing Zones"
     },
     "parTopLevelManagementGroupParentId": {
-      "value": ""
+      "value": "/providers/Microsoft.Management/managementGroups/myedge"
     },
     "parLandingZoneMgAlzDefaultsEnable": {
       "value": true
