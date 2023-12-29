@@ -18,7 +18,7 @@
       "value": false
     },
     "parLogAnalyticsWorkSpaceAndAutomationAccountLocation": {
-      "value": "eastus"
+      "value": "germanywestcentral"
     },
     "parLogAnalyticsWorkspaceResourceId": {
       "value": "/subscriptions/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx/resourceGroups/alz-logging/providers/Microsoft.OperationalInsights/workspaces/alz-log-analytics"
