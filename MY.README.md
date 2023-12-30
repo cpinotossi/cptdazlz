@@ -94,6 +94,18 @@ PARAMETERS="@infra-as-code/bicep/modules/policy/assignments/alzDefaults/paramete
 az deployment mg create --name ${NAME:0:63} --location $LOCATION --management-group-id $MGID --template-file $TEMPLATEFILE --parameters $PARAMETERS
 ~~~
 
+After the deployment we expect DINE policy assignments. And therefore we also expect new Service Principlas.
+
+~~~bash
+# List all Service Principals assignmnets for the management group alz scope
+alzRootScope="/providers/Microsoft.Management/managementGroups/alz"
+az role assignment list --scope $alzRootScope --query "[?roleDefinitionName=='Log Analytics Contributor'].principalId"
+# get the first service principal id entry of the list
+policyIdentityId=$(az role assignment list --scope $alzRootScope --query "[?roleDefinitionName=='Log Analytics Contributor'].principalId" -o tsv| head -n 1)
+# Match the Policy Assignments which does reference the service principal id
+az policy assignment list --scope $alzRootScope --query "[?identity.principalId=='$policyIdentityId']"
+~~~
+
 
 ### Deploy custom RBAC Role definition
 
@@ -116,6 +128,17 @@ TEMPLATEFILE="infra-as-code/bicep/modules/customRoleDefinitions/customRoleDefini
 PARAMETERS="@infra-as-code/bicep/modules/customRoleDefinitions/parameters/customRoleDefinitions.parameters.all.json"
 
 az deployment mg create --name ${NAME:0:63} --location $LOCATION --management-group-id $MGID --template-file $TEMPLATEFILE --parameters $PARAMETERS
+~~~
+
+#### RoleAssignments
+
+> NOT DONE !!
+
+~~~bash
+code infra-as-code/bicep/modules/roleAssignments/README.md
+code infra-as-code/bicep/modules/roleAssignments/roleAssignmentManagementGroup.bicep
+code infra-as-code/bicep/modules/roleAssignments/parameters/roleAssignmentManagementGroup.servicePrincipal.parameters.all.json
+code infra-as-code/bicep/modules/roleAssignments/generateddocs/roleAssignmentManagementGroup.bicep.md
 ~~~
 
 ### Deploy Logging & Sentinel Module
@@ -297,6 +320,7 @@ az ad sp create-for-rbac -n $prefix --role owner --query password -o tsv --scope
 az ad sp create-for-rbac -n $prefix --role owner --query password -o tsv --scope /
 # get service principal appid
 appid=$(az ad sp list --display-name $prefix --query [0].appId -o tsv)
+objectid=$(az ad sp list --display-name $prefix --query [0].id -o tsv)
 # all github to create tokens via inpersonation of the service principal
 az ad app federated-credential create --id $appid --parameters ./github.action/credential.json
 # verify federation setup
@@ -307,6 +331,7 @@ tid=$(az account show --query tenantId -o tsv)
 gh secret set AZURE_TENANT_ID -b $tid -e production
 subid=$(az account show --query id -o tsv)
 gh secret set AZURE_SUBSCRIPTION_ID -b $subid -e production
+gh secret set AZURE_OBJECT_ID -b $objectid -e production
 gh secret list --env production
 
 gh variable set MG_PREFIX -b alz --env production
