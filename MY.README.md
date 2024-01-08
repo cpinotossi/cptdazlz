@@ -55,6 +55,8 @@ After you have deployed the policy module to add all of the custom ALZ Azure Pol
 
 If you want to make all of the default Azure Policy Assignments that we recommend in the Azure Landing Zones conceptual architecture and reference implementation you can use the [ALZ Default Policy Assignments module](./infra-as-code/bicep/modules/policy/assignments/alzDefaults/README.md) to do this for you👍
 
+The following example will just assign one policy:
+
 ~~~bash
 code infra-as-code/bicep/modules/policy/assignments/README.md
 # copy the deny example
@@ -94,17 +96,502 @@ PARAMETERS="@infra-as-code/bicep/modules/policy/assignments/alzDefaults/paramete
 az deployment mg create --name ${NAME:0:63} --location $LOCATION --management-group-id $MGID --template-file $TEMPLATEFILE --parameters $PARAMETERS
 ~~~
 
-After the deployment we expect DINE policy assignments. And therefore we also expect new Service Principlas.
+#### Which policies at which scope have been assigned via alzDefaultPolicyAssignments.bicep?
+
+Verify which policies have been assigned to the management group alz.
+
+~~~bash
+alzRootScope="/providers/Microsoft.Management/managementGroups/alz"
+az policy assignment list --scope $alzRootScope --query "[].{scope:scope,displayName:displayName}"
+az policy assignment list --scope $alzRootScope --query "[].id" -o tsv | wc -l # 13
+alzLzScope="/providers/Microsoft.Management/managementGroups/alz-landingzones"
+az policy assignment list --scope $alzLzScope  --query "[].id" -o tsv | wc -l # 16
+alzLzCorpScope="/providers/Microsoft.Management/managementGroups/alz-landingzones-corp"
+az policy assignment list --scope $alzLzCorpScope  --query "[].id" -o tsv | wc -l # 5
+alzLzOnlineScope="/providers/Microsoft.Management/managementGroups/alz-landingzones-online"
+az policy assignment list --scope $alzLzOnlineScope  --query "[].id" -o tsv | wc -l # 0
+~~~
+
+Let us have a closer look at the once assigned to the alz-landingzone-corp management group.
+
+~~~bash
+az policy assignment list --scope $alzLzCorpScope  --query "[].name"
+~~~
+
+~~~json
+[
+  "Audit-PeDnsZones",
+  "Deny-Public-Endpoints",
+  "Deny-HybridNetworking",
+  "Deny-Public-IP-On-NIC",
+  "Deploy-Private-DNS-Zones"
+]
+~~~
+
+Let us verify how the decision has been taken to create the assignment for the policy "Deploy-Private-DNS-Zones".
+
+#### The Policy Set/Initative "Deploy-Private-DNS-Zones"
+
+But before we do this let us have a look at the policy itself behind the assignment.
+
+~~~bash
+# List all assignments under the management group alz-landingzones-corp
+az policy assignment list --scope $alzLzCorpScope  --query "[?contains(name,'Deploy-Private-DNS-Zones')].displayName" -o tsv # like shown at the azure portal.
+# Get the id of the policy assignment "Deploy-Private-DNS-Zones"
+policyDeployPDnsId=$(az policy assignment list --scope $alzLzCorpScope  --query "[?contains(name,'Deploy-Private-DNS-Zones')].policyDefinitionId" -o tsv) # PolicySetDefinition Deploy-Private-DNS-Zones
+# Extract the Name from the Id of the policy assignment "Deploy-Private-DNS-Zones"
+policyDeployPDnsName=$(basename "$policyDeployPDnsId")
+# "deploy-private-dns-zones" is an policy set which consist of multiple policies
+az policy set-definition show --management-group alz --name $policyDeployPDnsName --query "policyDefinitions[].{policyDefinitionId:policyDefinitionId,policyDefinitionReferenceId:policyDefinitionReferenceId}"
+az policy set-definition show --management-group alz --name $policyDeployPDnsName --query "policyDefinitions[].policyDefinitionReferenceId" -o tsv # DINE-Private-DNS-Azure-*
+# count the policies
+az policy set-definition show --management-group alz --name $policyDeployPDnsName --query "policyDefinitions[].policyDefinitionReferenceId" -o tsv | wc -l # 49
+~~~
+
+Let us have a closer look at the DINE-Private-DNS-Azure-Storage-Blob policy.
+
+We can find the string "DINE-Private-DNS-Azure-Storage-Blob" inside the following files 4 files insid our repo:
+
+- [customPolicyDefinitions.bicep](./infra-as-code/bicep/modules/policy/definitions/customPolicyDefinitions.bicep).
+- [policy_set_definitions/_policySetDefinitionsBicepInput.txt](./infra-as-code/bicep/modules/policy/definitions/lib/policy_set_definitions/_policySetDefinitionsBicepInput.txt).
+- [policy_set_definition_es_Deploy-Private-DNS-Zones.parameters.json](./infra-as-code/bicep/modules/policy/definitions/lib/policy_set_definitions/policy_set_definition_es_Deploy-Private-DNS-Zones.parameters.json)
+- [policy_set_definition_es_Deploy-Private-DNS-Zones.json](./infra-as-code/bicep/modules/policy/definitions/lib/policy_set_definitions/policy_set_definition_es_Deploy-Private-DNS-Zones.json)
+
+##### customPolicyDefinitions.bicep
+
+customPolicyDefinitions.bicep is deployed via zone0.yml.
+But the assignment of the policy "Deploy-Private-DNS-Zones" is done via zone1.yml.
+
+~~~bash
+code ./infra-as-code/bicep/modules/policy/definitions/customPolicyDefinitions.bicep
+~~~
+
+Contains the following section:
+
+~~~bicep
+// This variable contains a number of objects that load in the custom Azure Policy Set/Initiative Defintions that are provided as part of the ESLZ/ALZ reference implementation - this is automatically created in the file 'infra-as-code\bicep\modules\policy\lib\policy_set_definitions\_policySetDefinitionsBicepInput.txt' via a GitHub action, that runs on a daily schedule, and is then manually copied into this variable.
+var varCustomPolicySetDefinitionsArray = [
+  ...
+  {
+    name: 'Deploy-Private-DNS-Zones'
+    libSetDefinition: loadJsonContent('lib/policy_set_definitions/policy_set_definition_es_Deploy-Private-DNS-Zones.json')
+    libSetChildDefinitions: [
+    ...
+    {
+      definitionReferenceId: 'DINE-Private-DNS-Azure-Storage-Blob'
+      definitionId: '/providers/Microsoft.Authorization/policyDefinitions/75973700-529f-4de2-b794-fb9b6781b6b0'
+      definitionParameters: varPolicySetDefinitionEsDeployPrivateDNSZonesParameters['DINE-Private-DNS-Azure-Storage-Blob'].parameters
+      definitionGroups: []
+    }
+    ...
+    ]
+  }
+  ...
+]
+~~~
+
+> NOTE: "/providers/Microsoft.Authorization/policyDefinitions/75973700-529f-4de2-b794-fb9b6781b6b0" does reference the build-in policy "Configure a private DNS Zone ID for blob groupID" (displayName).
+
+~~~bash
+policyDeployPDnsBlobName=$(basename "/providers/Microsoft.Authorization/policyDefinitions/75973700-529f-4de2-b794-fb9b6781b6b0")
+az policy definition show --management-group alz --name $policyDeployPDnsBlobName
+~~~
+
+The build-in Policy "Configure a private DNS Zone ID for blob groupID"  parameters:
+- privateDnsZoneId
+- effect
+
+The variable varPolicySetDefinitionEsDeployPrivateDNSZonesParameters is defind as follow:
+
+~~~bicep
+var varPolicySetDefinitionEsDeployPrivateDNSZonesParameters = loadJsonContent('lib/policy_set_definitions/policy_set_definition_es_Deploy-Private-DNS-Zones.parameters.json')
+~~~
+
+##### policy_set_definition_es_Deploy-Private-DNS-Zones.parameters.json
+
+~~~bash
+code infra-as-code/bicep/modules/policy/definitions/lib/policy_set_definitions/policy_set_definition_es_Deploy-Private-DNS-Zones.parameters.json
+~~~
+
+Contains the following section:
+
+~~~json
+  "DINE-Private-DNS-Azure-Storage-Blob": {
+    "parameters": {
+      "privateDnsZoneId": {
+        "value": "[[parameters('azureStorageBlobPrivateDnsZoneId')]"
+      },
+      "effect": {
+        "value": "[[parameters('effect')]"
+      }
+    }
+  },
+~~~
+
+
+##### policy_set_definition_es_Deploy-Private-DNS-Zones.json
+
+~~~bash
+code infra-as-code/bicep/modules/policy/definitions/lib/policy_set_definitions/policy_set_definition_es_Deploy-Private-DNS-Zones.json
+~~~
+
+Referenced inside customPolicyDefinitions.bicep:
+
+~~~bicep
+var varCustomPolicySetDefinitionsArray = [
+  ...
+  {
+    name: 'Deploy-Private-DNS-Zones'
+    libSetDefinition: loadJsonContent('lib/policy_set_definitions/policy_set_definition_es_Deploy-Private-DNS-Zones.json')
+    libSetChildDefinitions: [
+~~~
+
+Contains the following section:
+
+~~~json
+"parameters": {
+  ...
+  "azureStorageBlobPrivateDnsZoneId": {
+    "type": "string",
+    "defaultValue": "",
+    "metadata": {
+      "displayName": "azureStorageBlobPrivateDnsZoneId",
+      "strongType": "Microsoft.Network/privateDnsZones",
+      "description": "Private DNS Zone Identifier"
+    }
+  },
+  ...
+  "effect": {
+    "type": "string",
+    "metadata": {
+      "displayName": "Effect",
+      "description": "Enable or disable the execution of the policy"
+    },
+    "allowedValues": [
+      "DeployIfNotExists",
+      "Disabled"
+    ],
+    "defaultValue": "DeployIfNotExists"
+  },
+  ...
+}
+"policyDefinitions": [
+  ...
+          {
+        "policyDefinitionReferenceId": "DINE-Private-DNS-Azure-Storage-Blob",
+        "policyDefinitionId": "/providers/Microsoft.Authorization/policyDefinitions/75973700-529f-4de2-b794-fb9b6781b6b0",
+        "parameters": {
+          "privateDnsZoneId": {
+            "value": "[[parameters('azureStorageBlobPrivateDnsZoneId')]"
+          },
+          "effect": {
+            "value": "[[parameters('effect')]"
+          }
+        },
+        "groupNames": []
+      },
+...
+]
+~~~
+
+##### Service Principal of the policy "Deploy-Private-DNS-Zones"
+
+The DINE policy "Configure a private DNS Zone ID for blob groupID" needs an Service Principal to be able to modify our private DNS Zone.
 
 ~~~bash
 # List all Service Principals assignmnets for the management group alz scope
-alzRootScope="/providers/Microsoft.Management/managementGroups/alz"
-az role assignment list --scope $alzRootScope --query "[?roleDefinitionName=='Log Analytics Contributor'].principalId"
-# get the first service principal id entry of the list
-policyIdentityId=$(az role assignment list --scope $alzRootScope --query "[?roleDefinitionName=='Log Analytics Contributor'].principalId" -o tsv| head -n 1)
-# Match the Policy Assignments which does reference the service principal id
-az policy assignment list --scope $alzRootScope --query "[?identity.principalId=='$policyIdentityId']"
+alzLzCorpScope="/providers/Microsoft.Management/managementGroups/alz-landingzones-corp"
+policyIdentityId=$(az policy assignment list --scope $alzLzCorpScope --query "[?name=='Deploy-Private-DNS-Zones'].identity.principalId" -o tsv)
+az ad sp show --id $policyIdentityId
+az role assignment list --assignee $policyIdentityId # Network Contributor
 ~~~
+
+> NOTE: The Service Principal scope is set to the subscription which does contain the private DNS Zone.
+
+##### Conclusion
+
+The policy "Deploy-Private-DNS-Zones" is
+- referenced in customPolicyDefinitions.bicep, inside the variable varCustomPolicySetDefinitionsArray which does reference
+ - libSetDefinition
+ - varPolicySetDefinitionEsDeployPrivateDNSZonesParameters which does reference policy_set_definition_es_Deploy-Private-DNS-Zones.parameters.json
+ - which does reference policy_set_definition_es_Deploy-Private-DNS-Zones.json.
+
+
+#### Wher does the assignment of the policy "Deploy-Private-DNS-Zones" happen?
+After we clarified how the policy set has been defined in our tenant (via customPolicyDefinitions.bicep) we like to understand how the assignment is done.
+
+The assignment is done inside zone1.yml:
+
+~~~yml
+- name: Deploy Default Policy Assignments
+  id: create_policy_assignments
+  uses: azure/arm-deploy@v1
+  with:
+    scope: managementgroup
+    managementGroupId: ${{ env.ManagementGroupPrefix }}
+    region: ${{ vars.LOCATION_GWC }}
+    template: infra-as-code/bicep/modules/policy/assignments/alzDefaults/alzDefaultPolicyAssignments.bicep
+    parameters: infra-as-code/bicep/modules/policy/assignments/alzDefaults/parameters/alzDefaultPolicyAssignments.parameters.all.json parLogAnalyticsWorkspaceResourceId=${{ vars.LAW_ID_GWC }} parDdosProtectionPlanId="" parPrivateDnsResourceGroupId=${{ vars.PDNS_RG_ID }} parLogAnalyticsWorkSpaceAndAutomationAccountLocation=${{ vars.LOCATION_GWC }}
+    deploymentName: create_policy_assignments-${{ env.runNumber }}
+    failOnStdErr: false
+~~~
+
+##### alzDefaultPolicyAssignments.bicep
+~~~bash
+code ./infra-as-code/bicep/modules/policy/assignments/alzDefaults/alzDefaultPolicyAssignments.bicep
+~~~
+
+Let us try to find our policy "Deploy-Private-DNS-Zones" inside the bicep file.
+In additon let us try to focus on Storage Blob.
+
+~~~bicep
+@sys.description('Resource ID of the Resource Group that conatin the Private DNS Zones. If left empty, the policy Deploy-Private-DNS-Zones will not be assigned to the corp Management Group.')
+param parPrivateDnsResourceGroupId string = ''
+...
+var varPolicyAssignmentDeployPrivateDNSZones = {
+  definitionId: '${varTopLevelManagementGroupResourceId}/providers/Microsoft.Authorization/policySetDefinitions/Deploy-Private-DNS-Zones'
+  libDefinition: loadJsonContent('../../../policy/assignments/lib/policy_assignments/policy_assignment_es_deploy_private_dns_zones.tmpl.json')
+}
+...
+// Deploy-Private-DNS-Zones Variables
+
+var varPrivateDnsZonesResourceGroupSubscriptionId = !empty(parPrivateDnsResourceGroupId) ? split(parPrivateDnsResourceGroupId, '/')[2] : ''
+
+var varPrivateDnsZonesBaseResourceId = '${parPrivateDnsResourceGroupId}/providers/Microsoft.Network/privateDnsZones/'
+
+var varPrivateDnsZonesFinalResourceIds = {
+  ...
+  azureStorageBlobPrivateDnsZoneId: '${varPrivateDnsZonesBaseResourceId}privatelink.blob.core.windows.net'
+  ...
+}
+...
+// Module - Policy Assignment - Deploy-Private-DNS-Zones
+module modPolicyAssignmentConnDeployPrivateDnsZones '../../../policy/assignments/policyAssignmentManagementGroup.bicep' = [for mgScope in varCorpManagementGroupIdsFiltered: if ((!empty(varPrivateDnsZonesResourceGroupSubscriptionId)) && (!contains(parExcludedPolicyAssignments, varPolicyAssignmentDeployPrivateDNSZones.libDefinition.name)) && parLandingZoneChildrenMgAlzDefaultsEnable) {
+  scope: managementGroup(mgScope)
+  name: contains(mgScope, 'confidential') ? varModuleDeploymentNames.modPolicyAssignmentLzsConfidentialCorpDeployPrivateDnsZones : varModuleDeploymentNames.modPolicyAssignmentLzsCorpDeployPrivateDnsZones
+  params: {
+    parPolicyAssignmentDefinitionId: varPolicyAssignmentDeployPrivateDNSZones.definitionId
+    parPolicyAssignmentName: varPolicyAssignmentDeployPrivateDNSZones.libDefinition.name
+    parPolicyAssignmentDisplayName: varPolicyAssignmentDeployPrivateDNSZones.libDefinition.properties.displayName
+    parPolicyAssignmentDescription: varPolicyAssignmentDeployPrivateDNSZones.libDefinition.properties.description
+    parPolicyAssignmentParameters: varPolicyAssignmentDeployPrivateDNSZones.libDefinition.properties.parameters
+    parPolicyAssignmentParameterOverrides: {
+      ...
+      azureStorageBlobPrivateDnsZoneId: {
+        value: varPrivateDnsZonesFinalResourceIds.azureStorageBlobPrivateDnsZoneId
+      }
+      ...
+    }
+    parPolicyAssignmentIdentityType: varPolicyAssignmentDeployPrivateDNSZones.libDefinition.identity.type
+    parPolicyAssignmentEnforcementMode: parDisableAlzDefaultPolicies ? 'DoNotEnforce' : varPolicyAssignmentDeployPrivateDNSZones.libDefinition.properties.enforcementMode
+    parPolicyAssignmentIdentityRoleDefinitionIds: [
+      varRbacRoleDefinitionIds.networkContributor
+    ]
+    parPolicyAssignmentIdentityRoleAssignmentsSubs: [
+      varPrivateDnsZonesResourceGroupSubscriptionId
+    ]
+    parTelemetryOptOut: parTelemetryOptOut
+  }
+}]
+...
+~~~
+
+
+
+
+
+
+
+-----------------------------------------------------------------------------------
+Lets verify which DNS Management Policy Assignments are available in the ALZ Root Management Group.
+
+~~~bash
+az policy definition list --management-group alz --query "[?contains(displayName,'DNS')].displayName" -o tsv | wc -l # 53 policies
+az policy assignment list --scope $alzRootScope  --query "[?contains(displayName,'DNS')]" -o tsv | wc -l # 0, no match
+~~~
+
+Out of all the policies which are defined at the root MG scope of our Landing Zone none of them are assigned to the management group alz right now.
+Let us try to figure out why they are not assigned.
+
+To deploy all LZ relevant policies we did follow the instruction mentioned in the [ALZ Default Policy Assignments module README.md](./infra-as-code/bicep/modules/policy/assignments/alzDefaults/README.md).
+
+It does refer the Bicep Configuration File [alzDefaultPolicyAssignments.bicep](./infra-as-code/bicep/modules/policy/assignments/alzDefaults/alzDefaultPolicyAssignments.bicep).
+
+The alzDefaultPolicyAssignments.bicep contains a long list of policies which will be assigned.
+During the deployment we used the parameter file [alzDefaultPolicyAssignments.parameters.all.json](./infra-as-code/bicep/modules/policy/assignments/alzDefaults/parameters/alzDefaultPolicyAssignments.parameters.all.json) referenced in the github workflow definition [zone-1.yml](./.github/workflows/zone-1.yml).
+
+But we did overwrite some of the parameters:
+- parLogAnalyticsWorkspaceResourceId=${{ vars.LAW_ID_GWC }}
+- parDdosProtectionPlanId=""
+- parPrivateDnsResourceGroupId=${{ vars.PDNS_RG_ID }}
+- parLogAnalyticsWorkSpaceAndAutomationAccountLocation=${{ vars.LOCATION_GWC }}
+- deploymentName: create_policy_assignments-${{ env.runNumber }
+
+So we need to focus on one policy which is relevatn to us and which we would like to see to become part (assigned) of our governance.
+
+A good one would be the policy "Deny the creation of private DNS" (displayName).
+
+We expect this policy to be assigned on the Management Group which does contain all Landing Zone Subscriptions. In our case this would be one of the folllowing Management Groups:
+
+- alz-landingzones
+- alz-landingzones-corp
+- alz-landingzones-online
+
+But as we can see via the following azure cli command it is not assigned to the management groups mentioned above.
+
+~~~bash
+policyDnsDenyName=$(az policy definition list --management-group alz --query "[?contains(displayName,'Deny the creation of private DNS')].name" -o tsv)
+az policy definition show --management-group alz --name $policyDnsDenyName
+policyDnsDenyId=$(az policy definition show --management-group alz --name $policyDnsDenyName --query id -o tsv)
+alzRootScope="/providers/Microsoft.Management/managementGroups/alz"
+az policy assignment list --scope $alzRootScope  --query "[].policyDefinitionId"
+az policy assignment list --scope $alzRootScope  --query "[?contains(policyDefinitionId,'$policyDnsDenyId')].policyDefinitionId" # no match
+alzLzScope="/providers/Microsoft.Management/managementGroups/alz-landingzones"
+az policy assignment list --scope $alzLzScope  --query "[?contains(policyDefinitionId,'$policyDnsDenyId')].policyDefinitionId" # no match
+alzLzCorpScope="/providers/Microsoft.Management/managementGroups/alz-landingzones-corp"
+az policy assignment list --scope $alzLzCorpScope  --query "[?contains(policyDefinitionId,'$policyDnsDenyId')].policyDefinitionId" # no match
+alzLzOnlineScope="/providers/Microsoft.Management/managementGroups/alz-landingzones-online"
+az policy assignment list --scope $alzLzOnlineScope  --query "[?contains(policyDefinitionId,'$policyDnsDenyId')].policyDefinitionId" # no match
+~~~
+
+Now let´s try to figure out why the policy is not assigned.
+
+Maybe this police does get assigned directly to Landing Zone subscriptions. If this is the case, this would explain why we do not see any assignment for the policy so far on the management group level.
+
+But before creating a Landing Zone we would like to verify if our current understanding is correct.
+
+What are the condition to assign the policy "Deny the creation of private DNS" (displayName) in the bicep file [alzDefaultPolicyAssignments.bicep](./infra-as-code/bicep/modules/policy/assignments/alzDefaults/alzDefaultPolicyAssignments.bicep)?
+
+The policy is defined in the file [policy_definition_es_Deny-Private-DNS-Zones.json](./infra-as-code/bicep/modules/policy/definitions/lib/policy_definitions/policy_definition_es_Deny-Private-DNS-Zones.json).
+
+The only reference to the policy is inside the file (customPolicyDefinitions.bicep)[./infra-as-code/bicep/modules/policy/definitions/customPolicyDefinitions.bicep].
+
+
+
+~~~bash
+# Find the policy definition file inside our repo.
+ls /infra-as-code/bicep/modules/policy/definitions/lib/policy_definitions/policy_definition_es_Deny-Private-DNS-Zones.json
+
+grep "policy/definitions/lib/policy_definitions/" ./infra-as-code/bicep/modules/policy/assignments/alzDefaults/alzDefaultPolicyAssignments.bicep # no match
+
+# Find Deny-Private-DNS-Zone inside the bicep file
+grep -A 10 -B 10 "policy_definition_es_Deny-Private-DNS-Zones.json" ./infra-as-code/bicep/modules/policy/assignments/alzDefaults/alzDefaultPolicyAssignments.bicep # no match
+~~~
+
+Let us try to find the policy instruction based on the json policy definition name
+
+~~~bash
+dnsPolicyFilePath=$(ls ./infra-as-code/bicep/modules/policy/definitions/lib/policy_definitions/*DNS*)
+dnsPolicyFileName=$(basename "$dnsPolicyFilePath")
+echo $dnsPolicyFileName
+grep -A 10 -B 10 "$dnsPolicyFileName" ./infra-as-code/bicep/modules/policy/assignments/alzDefaults/alzDefaultPolicyAssignments.bicep # no match
+~~~
+
+Based on Manual research I found the following section:
+
+~~~bicep
+// Module - Policy Assignment - Deploy-Private-DNS-Zones
+module modPolicyAssignmentConnDeployPrivateDnsZones '../../../policy/assignments/policyAssignmentManagementGroup.bicep' = [for mgScope in varCorpManagementGroupIdsFiltered: if ((!empty(varPrivateDnsZonesResourceGroupSubscriptionId)) && (!contains(parExcludedPolicyAssignments, varPolicyAssignmentDeployPrivateDNSZones.libDefinition.name)) && parLandingZoneChildrenMgAlzDefaultsEnable) {
+  scope: managementGroup(mgScope)
+  name: contains(mgScope, 'confidential') ? varModuleDeploymentNames.modPolicyAssignmentLzsConfidentialCorpDeployPrivateDnsZones : varModuleDeploymentNames.modPolicyAssignmentLzsCorpDeployPrivateDnsZones
+  params: {
+    parPolicyAssignmentDefinitionId: varPolicyAssignmentDeployPrivateDNSZones.definitionId
+    parPolicyAssignmentName: varPolicyAssignmentDeployPrivateDNSZones.libDefinition.name
+    parPolicyAssignmentDisplayName: varPolicyAssignmentDeployPrivateDNSZones.libDefinition.properties.displayName
+    parPolicyAssignmentDescription: varPolicyAssignmentDeployPrivateDNSZones.libDefinition.properties.description
+    parPolicyAssignmentParameters: varPolicyAssignmentDeployPrivateDNSZones.libDefinition.properties.parameters
+    parPolicyAssignmentParameterOverrides: {
+      azureFilePrivateDnsZoneId: {
+        value: varPrivateDnsZonesFinalResourceIds.azureFilePrivateDnsZoneId
+      }
+      // long list of all pDNS Zones
+    }
+    parPolicyAssignmentIdentityType: varPolicyAssignmentDeployPrivateDNSZones.libDefinition.identity.type
+    parPolicyAssignmentEnforcementMode: parDisableAlzDefaultPolicies ? 'DoNotEnforce' : varPolicyAssignmentDeployPrivateDNSZones.libDefinition.properties.enforcementMode
+    parPolicyAssignmentIdentityRoleDefinitionIds: [
+      varRbacRoleDefinitionIds.networkContributor
+    ]
+    parPolicyAssignmentIdentityRoleAssignmentsSubs: [
+      varPrivateDnsZonesResourceGroupSubscriptionId
+    ]
+    parTelemetryOptOut: parTelemetryOptOut
+  }
+}]
+
+code ./infra-as-code/bicep/modules/policy/assignments/alzDefaults/alzDefaultPolicyAssignments.bicep #line 1187
+~~~
+
+Let us try to understand each instruction.
+
+> ***module modPolicyAssignmentConnDeployPrivateDnsZones '../../../policy/assignments/policyAssignmentManagementGroup.bicep'***= [for mgScope in varCorpManagementGroupIdsFiltered: if ((!empty(varPrivateDnsZonesResourceGroupSubscriptionId)) && (!contains(parExcludedPolicyAssignments, varPolicyAssignmentDeployPrivateDNSZones.libDefinition.name)) && parLandingZoneChildrenMgAlzDefaultsEnable)
+
+The creation of the assignments is definewd in a seperate bicep file.
+
+> module modPolicyAssignmentConnDeployPrivateDnsZones '../../../policy/assignments/policyAssignmentManagementGroup.bicep'= [***for mgScope in varCorpManagementGroupIdsFiltered***: if ((!empty(varPrivateDnsZonesResourceGroupSubscriptionId)) && (!contains(parExcludedPolicyAssignments, varPolicyAssignmentDeployPrivateDNSZones.libDefinition.name)) && parLandingZoneChildrenMgAlzDefaultsEnable)
+
+We iterate over the variable varCorpManagementGroupIdsFiltered.
+
+In general the policy assignments will only apply to the Management Groups varCorpManagementGroupIdsFiltered. Like the name mentioned, this is an variable which is defined as follow:
+
+~~~bash
+var varCorpManagementGroupIdsFiltered = parLandingZoneMgConfidentialEnable ? varCorpManagementGroupIds : filter(varCorpManagementGroupIds, mg => !contains(toLower(mg), 'confidential'))
+
+code ./infra-as-code/bicep/modules/policy/assignments/alzDefaults/alzDefaultPolicyAssignments.bicep #line 362
+~~~
+
+It does reference the array variable varCorpManagementGroupIds which is defined as follow:
+
+~~~bash
+var varCorpManagementGroupIds = [
+  varManagementGroupIds.landingZonesCorp
+  varManagementGroupIds.landingZonesConfidentialCorp
+]
+~~~
+
+varManagementGroupIds.landingZonesCorp is a property of the object variable which is defined as follow:
+
+~~~bash
+// Management Groups Variables - Used For Policy Assignments
+var varManagementGroupIds = {
+  ...
+  landingZonesCorp: '${parTopLevelManagementGroupPrefix}-landingzones-corp${parTopLevelManagementGroupSuffix}'
+  ...
+  landingZonesConfidentialCorp: '${parTopLevelManagementGroupPrefix}-landingzones-confidential-corp${parTopLevelManagementGroupSuffix}'
+  ...
+}
+~~~
+
+Variable varCorpManagementGroupIds
+Based on my current understanding we are going to assign the policies to alz-landingzones-corp and alz-landingzones-confidential-corp.
+
+If we lookup the assignments we will figure out that our DNS Policy is not assigned
+
+~~~bash
+# List all Service Principals assignmnets for the management group alz scope
+alzCorpScope="/providers/Microsoft.Management/managementGroups/alz-landingzones-corp" #just use the management group id not the real path inside the management group tree structure.
+az policy assignment list --scope $alzCorpScope --query "[?contains(displayName,'DNS')].displayName" -o tsv | wc -l # 2 policies/initiatives
+az policy assignment list --scope $alzCorpScope --query "[?contains(displayName,'DNS')].{scope:scope,displayName:displayName}"
+~~~
+
+Why is the policy
+
+
+
+
+module modPolicyAssignmentConnDeployPrivateDnsZones '../../../policy/assignments/policyAssignmentManagementGroup.bicep'= [for mgScope in varCorpManagementGroupIdsFiltered: if ((!empty(varPrivateDnsZonesResourceGroupSubscriptionId)) && (!contains(parExcludedPolicyAssignments, varPolicyAssignmentDeployPrivateDNSZones.libDefinition.name)) && parLandingZoneChildrenMgAlzDefaultsEnable)
+
+
+
+
+
+
+~~~bash
+code infra-as-code/bicep/modules/policy/assignments/alzDefaults/README.md
+code infra-as-code/bicep/modules/policy/assignments/alzDefaults/alzDefaultPolicyAssignments.bicep
+code infra-as-code/bicep/modules/policy/assignments/alzDefaults/parameters/alzDefaultPolicyAssignments.parameters.all.json
+~~~
+
+
 
 
 ### Deploy custom RBAC Role definition
@@ -309,7 +796,6 @@ az deployment group create --name ${NAME:0:63} --resource-group $GROUP --templat
 
 Setup azure credentials for github actions based on [Use GitHub Actions to connect to Azure](https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure) without secrets.
 
-
 ~~~bash
 # define the prefix
 prefix=cptdazlz
@@ -325,6 +811,11 @@ objectid=$(az ad sp list --display-name $prefix --query [0].id -o tsv)
 az ad app federated-credential create --id $appid --parameters ./github.action/credential.json
 # verify federation setup
 az ad app federated-credential list --id $appid
+~~~
+
+We are going to provide some secretes and variables via the github build in secrets and variables feature.
+> NOTE: If it comes to secret, this is a best practices, but I am unsure if variable should go into github. It would be better to keep them all at one place. Maybe the bicep parameter files are a better place. But in this case we would need to store resource ids in clear text.
+~~~bash
 # create github secret via gh cli for repo cptdazlz
 gh secret set AZURE_CLIENT_ID -b $appid -e production
 tid=$(az account show --query tenantId -o tsv)
@@ -362,9 +853,11 @@ gh run list --repo cpinotossi/$prefix
 # View the details of the last run
 gh run view $(gh run list --repo cpinotossi/$prefix --json databaseId --jq '.[0].databaseId') --repo cpinotossi/$prefix --log-failed
 gh run view -h
-
-
 ~~~
+
+
+
+
 
 ## Enterprise Azure Policy as Code (EPAC)
 
@@ -435,4 +928,3 @@ echo $PATH
 gh version # 2.40.1 (2023-12-13)
 ~~~
 
-you will need to modify
